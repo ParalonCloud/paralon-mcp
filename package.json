@@ -1,6 +1,6 @@
 {
   "name": "@paraloncloud/mcp-rentals",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "mcpName": "io.github.ParalonCloud/mcp-rentals",
   "description": "MCP server for the ParalonCloud Rental API — let an AI agent rent, use, and stop GPUs from code.",
   "license": "MIT",

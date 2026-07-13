@@ -63,6 +63,8 @@ async function api(method, path, { body, headers } = {}) {
 
 // Wrap a result as an MCP text response. Non-OK responses are flagged isError
 // so the agent knows the call failed, with the API's message included.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 function reply(result, note) {
   const payload = note ? { note, ...result.data } : result.data;
   return {
@@ -92,7 +94,7 @@ const TOOLS = [
   {
     name: "create_rental",
     description:
-      "Start renting a GPU. SPENDS CREDITS (per-minute billing) — confirm with the user before calling. Asynchronous: returns a rental_id with status 'pending'. Then call get_rental repeatedly until its connection_pending field is false — the connection URL appears a few seconds AFTER status becomes 'running' (the secure tunnel takes a moment), so status:'running' with an empty connection is normal, not a failure. DURATION: the rental is open-ended by default (runs until the user stops it with destroy_rental) — use open-ended as the default. When starting one, briefly tell the user it's open-ended and bills per minute until stopped, and that they can set an 'hours' auto-stop cap instead if they prefer; only pass 'hours' when the user asks for a time limit. An idempotency key is generated automatically so accidental repeats don't start a second GPU.",
+      "Start renting a GPU. SPENDS CREDITS (per-minute billing) — confirm with the user before calling. Asynchronous: returns a rental_id with status 'pending'. Provisioning + the secure tunnel take ~20-40 seconds. After creating, call get_rental ONCE to fetch the connection URL — it waits internally for startup and returns when ready, so do NOT poll it in a tight loop. DURATION: the rental is open-ended by default (runs until the user stops it with destroy_rental) — use open-ended as the default. When starting one, briefly tell the user it's open-ended and bills per minute until stopped, and that they can set an 'hours' auto-stop cap instead if they prefer; only pass 'hours' when the user asks for a time limit. An idempotency key is generated automatically so accidental repeats don't start a second GPU.",
     inputSchema: {
       type: "object",
       properties: {
@@ -117,7 +119,7 @@ const TOOLS = [
   {
     name: "get_rental",
     description:
-      "Get one rental's status and its connection details (Jupyter URL + token). Poll this after create_rental. IMPORTANT: check the connection_pending field, not just status — a rental can be status:'running' with an empty connection for a few seconds while the secure tunnel comes up. Keep polling while connection_pending is true; the URL is ready when connection_pending is false. Read-only.",
+      "Get one rental's status and connection details (Jupyter URL + token). After create_rental, call this to get the URL. It WAITS internally (up to ~24s) for the rental to finish coming up and returns as soon as it's ready — so you usually only need ONE call, at most two. Do NOT call it repeatedly in a tight loop. Provisioning plus the secure tunnel take ~20-40 seconds total; the URL is ready when connection_pending is false. Read-only.",
     inputSchema: {
       type: "object",
       properties: { rental_id: { type: "string" } },
@@ -185,7 +187,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (!args.rental_id) {
         return reply({ ok: false, data: { error: "invalid_request", message: "rental_id is required." } });
       }
-      return reply(await api("GET", `/rentals/${encodeURIComponent(args.rental_id)}`));
+      const path = `/rentals/${encodeURIComponent(args.rental_id)}`;
+      // Provisioning + the secure tunnel take ~20-40s. Instead of returning a
+      // "pending" that makes the agent hammer this tool, wait here: poll every
+      // 3s for up to ~24s and return as soon as the connection is ready (or the
+      // budget runs out). One or two calls cover the whole startup.
+      let result = await api("GET", path);
+      let waited = 0;
+      while (result.ok && result.data && result.data.connection_pending === true && waited < 24000) {
+        await sleep(3000);
+        waited += 3000;
+        result = await api("GET", path);
+      }
+      return reply(result);
     }
 
     case "list_rentals": {
