@@ -1,0 +1,33 @@
+{
+  "name": "@paraloncloud/mcp-rentals",
+  "version": "1.0.0",
+  "description": "MCP server for the ParalonCloud Rental API — let an AI agent rent, use, and stop GPUs from code.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "paraloncloud-mcp-rentals": "server.js"
+  },
+  "main": "server.js",
+  "files": [
+    "server.js",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "gpu",
+    "gpu-rental",
+    "paraloncloud",
+    "claude",
+    "ai-agent"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
