@@ -92,7 +92,7 @@ const TOOLS = [
   {
     name: "create_rental",
     description:
-      "Start renting a GPU. SPENDS CREDITS (per-minute billing) — confirm with the user before calling. Asynchronous: returns a rental_id with status 'pending'. Then call get_rental repeatedly until its connection_pending field is false — the connection URL appears a few seconds AFTER status becomes 'running' (the secure tunnel takes a moment), so status:'running' with an empty connection is normal, not a failure. Pass 'hours' to auto-stop after N whole hours (recommended so a forgotten rental doesn't bill forever). An idempotency key is generated automatically so accidental repeats don't start a second GPU.",
+      "Start renting a GPU. SPENDS CREDITS (per-minute billing) — confirm with the user before calling. Asynchronous: returns a rental_id with status 'pending'. Then call get_rental repeatedly until its connection_pending field is false — the connection URL appears a few seconds AFTER status becomes 'running' (the secure tunnel takes a moment), so status:'running' with an empty connection is normal, not a failure. By DEFAULT the rental is open-ended and runs until the user stops it with destroy_rental — offer open-ended as the default. Only if the user asks for a time limit, pass 'hours' to add an auto-stop cap. An idempotency key is generated automatically so accidental repeats don't start a second GPU.",
     inputSchema: {
       type: "object",
       properties: {
@@ -106,7 +106,7 @@ const TOOLS = [
           type: "integer",
           minimum: 1,
           maximum: 720,
-          description: "Optional auto-stop after this many whole hours. Omit for open-ended (runs until destroyed).",
+          description: "Optional auto-stop cap: the rental stops itself after this many whole hours. Omit (the default) for an open-ended rental that runs until stopped with destroy_rental.",
         },
         name: { type: "string", description: "Optional label for the rental." },
       },
