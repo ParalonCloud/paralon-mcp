@@ -1,0 +1,31 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ParalonCloud/mcp-rentals",
+  "title": "ParalonCloud Rentals",
+  "description": "Rent GPUs from ParalonCloud — browse available GPUs, start a rental, poll for its connection URL, and stop it, over the rental API.",
+  "websiteUrl": "https://paraloncloud.com/docs/rental-api/mcp",
+  "repository": {
+    "url": "https://github.com/ParalonCloud/mcp-rentals",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@paraloncloud/mcp-rentals",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "PARALON_API_KEY",
+          "description": "A ParalonCloud prlc_ API key with the 'rental' scope enabled (create one at https://paraloncloud.com/console).",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
