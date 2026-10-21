@@ -1,12 +1,16 @@
 #!/usr/bin/env node
-// MCP server for the ParalonCloud Rental API.
+// MCP server for the ParalonCloud Rental API and Provider API.
 //
-// Exposes the rental REST API (https://paraloncloud.com/api/v1) as MCP tools so
-// an AI agent can browse GPUs, rent one, poll it for a connection URL, and stop
-// it — from inside Claude Code / Claude Desktop / Cursor / any MCP client.
+// Exposes the REST API (https://paraloncloud.com/api/v1) as MCP tools so an AI
+// agent can browse GPUs, rent one, poll it for a connection URL, and stop it;
+// and, for a GPU provider, manage their own nodes: list them with live GPU
+// load and temperature, add one and get its install command, take it off the
+// market and back, set its price, reclaim a spot node, and read earnings.
 //
 // Config lives in the MCP client, not here. The server reads two env vars:
-//   PARALON_API_KEY   (required)  a prlc_ key WITH the 'rental' scope enabled
+//   PARALON_API_KEY   (required)  a prlc_ key: the 'rental' scope for the
+//                                 rental tools, the 'nodes' scope for the
+//                                 provider tools (both can be on one key)
 //   PARALON_BASE_URL  (optional)  defaults to https://paraloncloud.com/api/v1
 //
 // Safety notes baked into the tool descriptions: create_rental and
@@ -35,7 +39,7 @@ async function api(method, path, { body, headers } = {}) {
       data: {
         error: "missing_api_key",
         message:
-          "Set PARALON_API_KEY in your MCP client config — a prlc_ key with the 'rental' scope enabled (create one at https://paraloncloud.com/console).",
+          "Set PARALON_API_KEY in your MCP client config: a prlc_ key with the 'rental' scope for rentals, or the 'nodes' scope (My nodes) for your own nodes (create one at https://paraloncloud.com/console).",
       },
     };
   }
@@ -66,7 +70,16 @@ async function api(method, path, { body, headers } = {}) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function reply(result, note) {
-  const payload = note ? { note, ...result.data } : result.data;
+  let data = result.data;
+  // A key without the scope: say how to fix it, not just "forbidden".
+  if (!result.ok && data && data.error === "insufficient_scope") {
+    data = {
+      ...data,
+      how_to_fix:
+        "In https://paraloncloud.com/console → API keys, open this key's settings and turn on the scope it names: 'GPU rentals' for the rental tools, 'My nodes' for the node and earnings tools.",
+    };
+  }
+  const payload = note ? { note, ...data } : data;
   return {
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
     isError: !result.ok,
@@ -74,7 +87,7 @@ function reply(result, note) {
 }
 
 const server = new Server(
-  { name: "paraloncloud-rentals", version: "1.0.0" },
+  { name: "paraloncloud-rentals", version: "1.1.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -150,6 +163,118 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+
+  // ---- Provider tools: the account's own nodes (key needs the 'nodes' scope)
+  {
+    name: "list_my_nodes",
+    description:
+      "PROVIDER: list the GPU nodes this account provides (needs a key with the 'nodes' scope). For each node: state (available, rented, paused, not_verified, not_ready, offline), GPUs and VRAM, price (default, allowed min/max, custom, what a renter pays), verification, reputation, the current rental (never the renter), and live metrics from the last minute: per-GPU load %, temperature °C, power W and VRAM, plus host CPU and memory. Read-only.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_my_node",
+    description: "PROVIDER: one of the account's nodes, same fields as list_my_nodes (state, price, rental, live GPU metrics). Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: { node_id: { type: "string", description: "Node UUID from list_my_nodes." } },
+      required: ["node_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "add_node",
+    description:
+      "PROVIDER: add a new node to the account and get the docker command that installs the agent on the machine. Confirm the name and type with the user first. The returned command contains the node's secret token: show it only to the user, never paste it anywhere public. The node comes online once the command runs on the machine, then goes through the GPU check. At most 20 nodes an hour per key.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "A label for the node, up to 100 characters." },
+        type: { type: "string", enum: ["gpu", "cpu", "mac"], description: "Default gpu." },
+        os: { type: "string", enum: ["linux", "windows"], description: "Operating system of the machine. Default linux." },
+        available: { type: "boolean", description: "On the market as soon as it is ready. Default true." },
+        spot: { type: "boolean", description: "A spot node: discounted and reclaimable (GPU only). Default false." },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_node_install_command",
+    description:
+      "PROVIDER: the docker command that installs the agent for an existing node (to reinstall or move it). It contains the node's secret token: show it only to the user. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: { node_id: { type: "string" } },
+      required: ["node_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "set_node_available",
+    description:
+      "PROVIDER: take a node off the market (available=false) or put it back (available=true). Off stops new rentals at once; a rental already running goes on to its end. Use it when the owner needs the machine or it is rented on another marketplace. Confirm with the user unless they asked for exactly this.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node_id: { type: "string" },
+        available: { type: "boolean" },
+      },
+      required: ["node_id", "available"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "set_node_price",
+    description:
+      "PROVIDER: set a node's price in US dollars per hour for the whole node (what the renter pays; the provider gets it minus the platform fee), or null to go back to the platform default. Must be within the node's price.min and price.max (50% to 300% of the default; see get_my_node). A rental already running keeps its price. Not possible on a spot node. Confirm the new price with the user first.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node_id: { type: "string" },
+        price_per_hour: { type: ["number", "null"], description: "USD per hour, or null for the default price." },
+      },
+      required: ["node_id", "price_per_hour"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_node",
+    description:
+      "PROVIDER: change several things on a node at once: name, spot (true/false; refused while the node is rented, and turning spot on clears a custom price), available, price_per_hour (USD per hour or null). Send only what changes. Confirm changes with the user first.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node_id: { type: "string" },
+        name: { type: "string" },
+        spot: { type: "boolean" },
+        available: { type: "boolean" },
+        price_per_hour: { type: ["number", "null"] },
+      },
+      required: ["node_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "reclaim_spot_node",
+    description:
+      "PROVIDER: take a spot node back for the owner's own use (\"In use\"): rentals and inference go off, and a spot rental running on it STOPS TWO MINUTES LATER (the renter is told). Only for spot nodes. Always confirm with the user first. Put the node back afterwards with set_node_available(true).",
+    inputSchema: {
+      type: "object",
+      properties: { node_id: { type: "string" } },
+      required: ["node_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_earnings",
+    description:
+      "PROVIDER: the account's earnings in USD by UTC day for the last `days` days (default 30, max 366): rentals per node and inference for the account, after the platform fee; the total; the balance that can be withdrawn now; and what rentals still running have billed so far. Payouts themselves are not available through the API. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: { days: { type: "integer", minimum: 1, maximum: 366 } },
+      additionalProperties: false,
+    },
+  },
 ];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
@@ -212,6 +337,66 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return reply({ ok: false, data: { error: "invalid_request", message: "rental_id is required." } });
       }
       return reply(await api("DELETE", `/rentals/${encodeURIComponent(args.rental_id)}`));
+    }
+
+    // ---- Provider tools
+    case "list_my_nodes":
+      return reply(await api("GET", "/nodes"));
+
+    case "get_my_node":
+    case "get_node_install_command":
+    case "reclaim_spot_node": {
+      if (!args.node_id) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "node_id is required (see list_my_nodes)." } });
+      }
+      const id = encodeURIComponent(args.node_id);
+      if (name === "get_my_node") return reply(await api("GET", `/nodes/${id}`));
+      if (name === "get_node_install_command") return reply(await api("GET", `/nodes/${id}/command`));
+      const result = await api("POST", `/nodes/${id}/reclaim`);
+      return reply(
+        result,
+        result.ok ? "The node is in use: no new rentals or inference. Put it back with set_node_available(available=true)." : undefined
+      );
+    }
+
+    case "add_node": {
+      if (!args.name) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "name is required." } });
+      }
+      const body = { name: args.name };
+      for (const k of ["type", "os", "available", "spot"]) if (args[k] !== undefined) body[k] = args[k];
+      const result = await api("POST", "/nodes", { body });
+      return reply(
+        result,
+        result.ok
+          ? "Node added. Give the user docker_command to run on the machine (it holds the node's secret token). The node shows online once it runs, then goes through the GPU check."
+          : undefined
+      );
+    }
+
+    case "set_node_available":
+    case "set_node_price":
+    case "update_node": {
+      if (!args.node_id) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "node_id is required (see list_my_nodes)." } });
+      }
+      const body = {};
+      for (const k of ["name", "spot", "available", "price_per_hour"]) if (args[k] !== undefined) body[k] = args[k];
+      if (name === "set_node_available" && typeof args.available !== "boolean") {
+        return reply({ ok: false, data: { error: "invalid_request", message: "available must be true or false." } });
+      }
+      if (name === "set_node_price" && !("price_per_hour" in args)) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "price_per_hour is required (a number in USD, or null for the default)." } });
+      }
+      if (Object.keys(body).length === 0) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "Nothing to change: send name, spot, available or price_per_hour." } });
+      }
+      return reply(await api("PATCH", `/nodes/${encodeURIComponent(args.node_id)}`, { body }));
+    }
+
+    case "get_earnings": {
+      const q = args.days ? `?days=${encodeURIComponent(args.days)}` : "";
+      return reply(await api("GET", `/earnings${q}`));
     }
 
     default:

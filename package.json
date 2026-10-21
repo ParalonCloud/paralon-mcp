@@ -1,8 +1,8 @@
 {
   "name": "@paraloncloud/mcp-rentals",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "mcpName": "io.github.ParalonCloud/mcp-rentals",
-  "description": "MCP server for the ParalonCloud Rental API — let an AI agent rent, use, and stop GPUs from code.",
+  "description": "MCP server for ParalonCloud: rent GPUs, and as a GPU provider manage your own nodes, prices and earnings, from an AI agent.",
   "license": "MIT",
   "author": "ParalonCloud",
   "homepage": "https://github.com/ParalonCloud/mcp-rentals#readme",
@@ -35,7 +35,9 @@
     "gpu-rental",
     "paraloncloud",
     "claude",
-    "ai-agent"
+    "ai-agent",
+    "gpu-provider",
+    "node-management"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
