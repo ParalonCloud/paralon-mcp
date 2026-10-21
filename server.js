@@ -87,7 +87,7 @@ function reply(result, note) {
 }
 
 const server = new Server(
-  { name: "paraloncloud-rentals", version: "1.1.0" },
+  { name: "paraloncloud", version: "1.2.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -408,5 +408,5 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 // Log to stderr only — stdout is the MCP protocol channel.
 console.error(
-  `paraloncloud-rentals MCP server running (base: ${BASE_URL}, key: ${API_KEY ? "set" : "MISSING — set PARALON_API_KEY"})`
+  `ParalonCloud MCP server running (base: ${BASE_URL}, key: ${API_KEY ? "set" : "MISSING — set PARALON_API_KEY"})`
 );

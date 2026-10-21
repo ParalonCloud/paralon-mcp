@@ -1,21 +1,21 @@
 {
-  "name": "@paraloncloud/mcp-rentals",
-  "version": "1.1.0",
-  "mcpName": "io.github.ParalonCloud/mcp-rentals",
-  "description": "MCP server for ParalonCloud: rent GPUs, and as a GPU provider manage your own nodes, prices and earnings, from an AI agent.",
+  "name": "@paraloncloud/mcp",
+  "version": "1.2.0",
+  "mcpName": "io.github.ParalonCloud/paralon-mcp",
+  "description": "ParalonCloud MCP server: rent GPUs, and as a GPU provider manage your own nodes, prices and earnings, from an AI agent.",
   "license": "MIT",
   "author": "ParalonCloud",
-  "homepage": "https://github.com/ParalonCloud/mcp-rentals#readme",
+  "homepage": "https://github.com/ParalonCloud/paralon-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ParalonCloud/mcp-rentals.git"
+    "url": "git+https://github.com/ParalonCloud/paralon-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/ParalonCloud/mcp-rentals/issues"
+    "url": "https://github.com/ParalonCloud/paralon-mcp/issues"
   },
   "type": "module",
   "bin": {
-    "paraloncloud-mcp-rentals": "server.js"
+    "paralon-mcp": "server.js"
   },
   "main": "server.js",
   "files": [

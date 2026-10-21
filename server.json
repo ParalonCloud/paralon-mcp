@@ -1,20 +1,20 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.ParalonCloud/mcp-rentals",
-  "title": "ParalonCloud Rentals",
+  "name": "io.github.ParalonCloud/paralon-mcp",
+  "title": "ParalonCloud",
   "description": "Rent GPUs on ParalonCloud, or as a provider manage your nodes, prices and earnings.",
   "websiteUrl": "https://paraloncloud.com/docs/rental-api/mcp",
   "repository": {
-    "url": "https://github.com/ParalonCloud/mcp-rentals",
+    "url": "https://github.com/ParalonCloud/paralon-mcp",
     "source": "github"
   },
-  "version": "1.1.0",
+  "version": "1.2.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@paraloncloud/mcp-rentals",
-      "version": "1.1.0",
+      "identifier": "@paraloncloud/mcp",
+      "version": "1.2.0",
       "transport": {
         "type": "stdio"
       },

@@ -1,4 +1,4 @@
-# ParalonCloud Rentals — MCP server
+# ParalonCloud MCP server
 
 Rent GPUs from inside your AI agent, and, if you provide GPUs, run your own nodes from it.
 This is an [MCP](https://modelcontextprotocol.io) server for the
@@ -16,6 +16,8 @@ using natural language.
 > One key for everything: the same `prlc_` key powers ParalonCloud's
 > [OpenAI-compatible inference API](https://paraloncloud.com/docs/inference-api). Build an
 > agent that calls a model **and** rents the GPU to run the heavy job.
+
+> Formerly `@paraloncloud/mcp-rentals`. That package is deprecated: switch your config to `@paraloncloud/mcp`.
 
 ## Tools
 
@@ -66,9 +68,9 @@ The client passes your key via the `PARALON_API_KEY` env var — you never edit 
 ```json
 {
   "mcpServers": {
-    "paraloncloud-rentals": {
+    "paraloncloud": {
       "command": "npx",
-      "args": ["-y", "@paraloncloud/mcp-rentals"],
+      "args": ["-y", "@paraloncloud/mcp"],
       "env": {
         "PARALON_API_KEY": "prlc_your_key_here"
       }
@@ -80,9 +82,9 @@ The client passes your key via the `PARALON_API_KEY` env var — you never edit 
 **Claude Code** — one command:
 
 ```bash
-claude mcp add paraloncloud-rentals \
+claude mcp add paraloncloud \
   --env PARALON_API_KEY=prlc_your_key_here \
-  -- npx -y @paraloncloud/mcp-rentals
+  -- npx -y @paraloncloud/mcp
 ```
 
 **Cursor** — `.cursor/mcp.json` (same shape as Claude Desktop above).
