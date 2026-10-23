@@ -44,6 +44,8 @@ using natural language.
 | `set_node_price` | Set the price in USD per hour for the node, or `null` for the default |
 | `update_node` | Change name, spot, availability and price in one call |
 | `reclaim_spot_node` | Take a spot node back for your own use; a spot rental on it stops in 2 minutes |
+| `get_node_access` | Who can rent a node: everyone, or only the people, domains and organizations listed |
+| `set_node_access` | Keep a node private for chosen renters (email, domain, organization), or open it to everyone (`[]`) |
 | `get_earnings` | Earnings by day (rentals per node, inference per account) and the withdrawable balance |
 
 Payouts are not reachable from the API or this server. Deleting a node stays on the site.
@@ -114,7 +116,7 @@ As a provider:
 - Pass `hours` so a rental auto-stops even if the agent forgets to.
 - The key's `max_active_rentals` limit (set in the Console) caps concurrency regardless.
 - The node tools that change something (`add_node`, `set_node_available`, `set_node_price`,
-  `update_node`, `reclaim_spot_node`) tell the agent to confirm with you first;
+  `update_node`, `reclaim_spot_node`, `set_node_access`) tell the agent to confirm with you first;
   `reclaim_spot_node` stops a renter's spot rental two minutes later.
 - `add_node` and `get_node_install_command` return a command with the node's secret token:
   keep it private.

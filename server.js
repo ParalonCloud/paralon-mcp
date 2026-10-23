@@ -87,7 +87,7 @@ function reply(result, note) {
 }
 
 const server = new Server(
-  { name: "paraloncloud", version: "1.2.0" },
+  { name: "paraloncloud", version: "1.3.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -95,7 +95,7 @@ const TOOLS = [
   {
     name: "list_gpus",
     description:
-      "List GPU nodes available to rent right now, with price per hour, GPU model, VRAM, CUDA compute capability, and country. Rent by the returned node_id. Read-only, no cost. For modern LLM work prefer compute_cap >= 8.9 (FP8).",
+      "List GPU nodes available to rent right now, with price per hour, GPU model, VRAM, CUDA compute capability, and country. Rent by the returned node_id. reserved_for_you: true marks a node its provider keeps for this key's person or organization: such nodes come first and nobody else sees them. Read-only, no cost. For modern LLM work prefer compute_cap >= 8.9 (FP8).",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -266,6 +266,43 @@ const TOOLS = [
     },
   },
   {
+    name: "get_node_access",
+    description:
+      "PROVIDER: who can rent a node. An empty list (private: false) means everyone; otherwise only the people (email), email domains and organizations listed see the node and can rent it. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: { node_id: { type: "string" } },
+      required: ["node_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "set_node_access",
+    description:
+      "PROVIDER: set who can rent a node, replacing the whole list. Each entry is {kind: \"email\", value: \"ana@company.com\"}, {kind: \"domain\", value: \"company.com\"} or {kind: \"org\", value: \"<organization name or ID>\"}. A non-empty list makes the node PRIVATE: only those renters see it and can rent it, and ParalonCloud places no inference or other work on it, so it earns from their rentals only. [] opens it to everyone again. Call get_node_access first to keep existing entries. Always confirm with the user first. People and organizations added are told by email.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node_id: { type: "string" },
+        entries: {
+          type: "array",
+          maxItems: 50,
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["email", "domain", "org"] },
+              value: { type: "string" },
+            },
+            required: ["kind", "value"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["node_id", "entries"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "get_earnings",
     description:
       "PROVIDER: the account's earnings in USD by UTC day for the last `days` days (default 30, max 366): rentals per node and inference for the account, after the platform fee; the total; the balance that can be withdrawn now; and what rentals still running have billed so far. Payouts themselves are not available through the API. Read-only.",
@@ -392,6 +429,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return reply({ ok: false, data: { error: "invalid_request", message: "Nothing to change: send name, spot, available or price_per_hour." } });
       }
       return reply(await api("PATCH", `/nodes/${encodeURIComponent(args.node_id)}`, { body }));
+    }
+
+    case "get_node_access":
+    case "set_node_access": {
+      if (!args.node_id) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "node_id is required (see list_my_nodes)." } });
+      }
+      const path = `/nodes/${encodeURIComponent(args.node_id)}/access`;
+      if (name === "get_node_access") return reply(await api("GET", path));
+      if (!Array.isArray(args.entries)) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "entries is required: the whole list, [] for everyone." } });
+      }
+      const result = await api("PUT", path, { body: { entries: args.entries } });
+      return reply(
+        result,
+        result.ok
+          ? result.data && result.data.private
+            ? "The node is private: only the listed renters see and rent it, and no ParalonCloud workloads run on it."
+            : "The node is open to everyone again."
+          : undefined
+      );
     }
 
     case "get_earnings": {
