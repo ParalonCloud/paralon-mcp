@@ -87,7 +87,7 @@ function reply(result, note) {
 }
 
 const server = new Server(
-  { name: "paraloncloud", version: "1.3.0" },
+  { name: "paraloncloud", version: "1.3.1" },
   { capabilities: { tools: {} } }
 );
 
@@ -95,7 +95,7 @@ const TOOLS = [
   {
     name: "list_gpus",
     description:
-      "List GPU nodes available to rent right now, with price per hour, GPU model, VRAM, CUDA compute capability, and country. Rent by the returned node_id. reserved_for_you: true marks a node its provider keeps for this key's person or organization: such nodes come first and nobody else sees them. Read-only, no cost. For modern LLM work prefer compute_cap >= 8.9 (FP8).",
+      "List GPU nodes available to rent right now, with price per hour, GPU model, VRAM, CUDA compute capability, and country. Rent by the returned node_id. reserved_for_you: true marks a node its provider keeps for this key's person or organization: such nodes come first and nobody else sees them. Read-only, no cost. For modern LLM work prefer compute_cap >= 8.9 (FP8). spot: true marks a spot node: cheaper (list_price_per_hour is the on-demand price), but its provider can take it back with two minutes' notice, so avoid it for long unattended jobs. restricted_internet: true means the node's own network cannot reach the services in unreachable_services (e.g. GitHub, Hugging Face, PyPI, Docker Hub), so git clone, pip install and model or image downloads fail there; prefer a node where it is false when the job downloads anything (null means not checked yet).",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
