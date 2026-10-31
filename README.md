@@ -27,8 +27,9 @@ using natural language.
 | --- | --- | --- |
 | `list_gpus` | List rentable GPUs with price, VRAM, compute capability, country | free |
 | `get_balance` | Your credit balance | free |
-| `create_rental` | Start a rental with JupyterLab or SSH (`type: "ssh"`) (async → poll) | **spends credits** |
-| `get_rental` | Status + the JupyterLab URL or the SSH command once running | free |
+| `list_templates` | Apps a rental can start with (ComfyUI), their version and minimums | free |
+| `create_rental` | Start a rental with JupyterLab or SSH (`type: "ssh"`), optionally with an app installed (`template: "comfyui"`) (async → poll) | **spends credits** |
+| `get_rental` | Status + the JupyterLab URL or the SSH command once running, and an app's link (`connection.app_url`) | free |
 | `list_rentals` | Your active rentals (`status: "all"` for history) | free |
 | `destroy_rental` | Stop a rental and stop billing | — |
 | `list_ssh_keys` | The SSH public keys an SSH rental installs | free |
@@ -112,6 +113,12 @@ polls `get_rental` for the Jupyter URL. Say "stop it" and it calls `destroy_rent
 
 The agent makes a key with `ssh-keygen`, saves it with `add_ssh_key`, picks a node with
 `ssh: true`, starts it with `type: "ssh"`, runs the command `get_rental` returns, and stops it.
+
+> "Start ComfyUI on a GPU with 24 GB for an hour and give me the link."
+
+The agent calls `list_templates`, picks a node whose `templates` has `comfyui`, starts it with
+`template: "comfyui"` and `hours: 1`, and hands you `connection.app_url` from `get_rental` once the
+app answers, a minute or two after the machine.
 
 As a provider:
 

@@ -89,7 +89,7 @@ function reply(result, note) {
 }
 
 const server = new Server(
-  { name: "paraloncloud", version: "1.4.0" },
+  { name: "paraloncloud", version: "1.5.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -97,7 +97,13 @@ const TOOLS = [
   {
     name: "list_gpus",
     description:
-      "List GPU nodes available to rent right now, with price per hour, GPU model, VRAM, CUDA compute capability, and country. Rent by the returned node_id. reserved_for_you: true marks a node its provider keeps for this key's person or organization: such nodes come first and nobody else sees them. Read-only, no cost. For modern LLM work prefer compute_cap >= 8.9 (FP8). spot: true marks a spot node: cheaper (list_price_per_hour is the on-demand price), but its provider can take it back with two minutes' notice, so avoid it for long unattended jobs. restricted_internet: true means the node's own network cannot reach the services in unreachable_services (e.g. GitHub, Hugging Face, PyPI, Docker Hub), so git clone, pip install and model or image downloads fail there; prefer a node where it is false when the job downloads anything (null means not checked yet). ssh: true means create_rental can start it with type 'ssh'.",
+      "List GPU nodes available to rent right now, with price per hour, GPU model, VRAM, CUDA compute capability, and country. Rent by the returned node_id. reserved_for_you: true marks a node its provider keeps for this key's person or organization: such nodes come first and nobody else sees them. Read-only, no cost. For modern LLM work prefer compute_cap >= 8.9 (FP8). spot: true marks a spot node: cheaper (list_price_per_hour is the on-demand price), but its provider can take it back with two minutes' notice, so avoid it for long unattended jobs. restricted_internet: true means the node's own network cannot reach the services in unreachable_services (e.g. GitHub, Hugging Face, PyPI, Docker Hub), so git clone, pip install and model or image downloads fail there; prefer a node where it is false when the job downloads anything (null means not checked yet). ssh: true means create_rental can start it with type 'ssh'. templates lists the apps create_rental can install on that node (e.g. [\"comfyui\"]); see list_templates.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "list_templates",
+    description:
+      "List the apps a rental can start with, installed and running and opened in the browser by its own link: today ComfyUI (node-based image and video generation: Flux, SDXL, Wan). Each has a slug for create_rental's template, the version a rental gets (tested and pinned), and what a machine needs (min_vram_gb per GPU, min_disk_gb). Pick a node whose templates in list_gpus contains the slug. Read-only, no cost. Use it when the user wants to generate images or video, or names one of these apps.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -125,6 +131,10 @@ const TOOLS = [
           maximum: 720,
           description: "Optional auto-stop cap: the rental stops itself after this many whole hours. Omit (the default) for an open-ended rental that runs until stopped with destroy_rental.",
         },
+        template: {
+          type: "string",
+          description: "Optional app to install and start on the machine, by slug from list_templates (e.g. 'comfyui'). Only on a node whose templates in list_gpus contains it. The rental is still JupyterLab or SSH as type says, at the same price; the app comes up a minute or two after the machine answers, and get_rental then returns connection.app_url (its own link with a token). It starts empty: the user downloads models from inside the app.",
+        },
         name: { type: "string", description: "Optional label for the rental." },
       },
       required: ["node_id"],
@@ -134,7 +144,7 @@ const TOOLS = [
   {
     name: "get_rental",
     description:
-      "Get one rental's status and connection details: for a JupyterLab rental connection.access_url (URL with its token), for an SSH rental connection.ssh_command (run it from the computer holding the private key; it needs cloudflared installed, and -i <private key> when the key is not in ~/.ssh). After create_rental, call this to get the URL. It WAITS internally (up to ~24s) for the rental to finish coming up and returns as soon as it's ready — so you usually only need ONE call, at most two. Do NOT call it repeatedly in a tight loop. Provisioning plus the secure tunnel take ~20-40 seconds total; the URL is ready when connection_pending is false. Read-only.",
+      "Get one rental's status and connection details: for a JupyterLab rental connection.access_url (URL with its token), for an SSH rental connection.ssh_command (run it from the computer holding the private key; it needs cloudflared installed, and -i <private key> when the key is not in ~/.ssh). A rental started with a template also has app (name, version, state installing / starting / ready / failed, step) and, once the app answers, connection.app_url: the link that opens it, with its token; treat it like a password. state failed means the app did not start while the machine runs and bills: say so and offer to stop it. After create_rental, call this to get the URL. It WAITS internally (up to ~24s) for the rental to finish coming up and returns as soon as it's ready — so you usually only need ONE call, at most two. Do NOT call it repeatedly in a tight loop. Provisioning plus the secure tunnel take ~20-40 seconds total; the URL is ready when connection_pending is false. Read-only.",
     inputSchema: {
       type: "object",
       properties: { rental_id: { type: "string" } },
@@ -360,6 +370,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     case "get_balance":
       return reply(await api("GET", "/balance"));
 
+    case "list_templates":
+      return reply(await api("GET", "/templates"));
+
     case "create_rental": {
       if (!args.node_id) {
         return reply({ ok: false, data: { error: "invalid_request", message: "node_id is required (see list_gpus)." } });
@@ -367,6 +380,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const body = { node_id: args.node_id, type: args.type || "jupyter" };
       if (args.hours != null) body.hours = args.hours;
       if (args.name) body.name = args.name;
+      if (args.template) body.template = args.template;
       const result = await api("POST", "/rentals", {
         body,
         headers: { "Idempotency-Key": randomUUID() },
@@ -374,7 +388,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return reply(
         result,
         result.ok
-          ? (body.type === "ssh"
+          ? (body.template
+              ? `Rental is provisioning with ${body.template}. Call get_rental with this rental_id: the machine answers first, the app a minute or two later; connection.app_url is its link.`
+              : body.type === "ssh"
               ? "Rental is provisioning. Call get_rental with this rental_id until status is 'running' to get the SSH command."
               : "Rental is provisioning. Call get_rental with this rental_id until status is 'running' to get the connection URL.")
           : undefined
@@ -390,9 +406,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // "pending" that makes the agent hammer this tool, wait here: poll every
       // 3s for up to ~24s and return as soon as the connection is ready (or the
       // budget runs out). One or two calls cover the whole startup.
+      // A template's app comes up after the machine: wait for it the same way.
+      const appPending = (d) => !!d?.app && d.status === "running" && (d.app.state === "installing" || d.app.state === "starting");
       let result = await api("GET", path);
       let waited = 0;
-      while (result.ok && result.data && result.data.connection_pending === true && waited < 24000) {
+      while (result.ok && result.data && (result.data.connection_pending === true || appPending(result.data)) && waited < 24000) {
         await sleep(3000);
         waited += 3000;
         result = await api("GET", path);
