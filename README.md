@@ -27,10 +27,18 @@ using natural language.
 | --- | --- | --- |
 | `list_gpus` | List rentable GPUs with price, VRAM, compute capability, country | free |
 | `get_balance` | Your credit balance | free |
-| `create_rental` | Start a Jupyter rental (async → poll) | **spends credits** |
-| `get_rental` | Status + connection URL once running | free |
+| `create_rental` | Start a rental with JupyterLab or SSH (`type: "ssh"`) (async → poll) | **spends credits** |
+| `get_rental` | Status + the JupyterLab URL or the SSH command once running | free |
 | `list_rentals` | Your active rentals (`status: "all"` for history) | free |
 | `destroy_rental` | Stop a rental and stop billing | — |
+| `list_ssh_keys` | The SSH public keys an SSH rental installs | free |
+| `add_ssh_key` | Save an SSH public key (the `.pub` line, never the private key) | free |
+| `delete_ssh_key` | Delete a saved key; new SSH rentals stop accepting it | free |
+
+An SSH rental installs every saved key, so the agent can make its own key, add it, rent with
+`type: "ssh"`, and run commands on the machine. Connecting needs
+[cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+on the computer that holds the private key: `get_rental` returns the command.
 
 ### Your nodes, for GPU providers (key needs the `nodes` scope)
 
@@ -99,6 +107,11 @@ Optional env: `PARALON_BASE_URL` (defaults to `https://paraloncloud.com/api/v1`)
 
 The agent calls `list_gpus`, picks a node, and calls `create_rental` with `hours: 2`. It then
 polls `get_rental` for the Jupyter URL. Say "stop it" and it calls `destroy_rental`.
+
+> "Rent a 4090 over SSH, run nvidia-smi on it, then stop it."
+
+The agent makes a key with `ssh-keygen`, saves it with `add_ssh_key`, picks a node with
+`ssh: true`, starts it with `type: "ssh"`, runs the command `get_rental` returns, and stops it.
 
 As a provider:
 

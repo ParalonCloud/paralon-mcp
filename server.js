@@ -2,7 +2,9 @@
 // MCP server for the ParalonCloud Rental API and Provider API.
 //
 // Exposes the REST API (https://paraloncloud.com/api/v1) as MCP tools so an AI
-// agent can browse GPUs, rent one, poll it for a connection URL, and stop it;
+// agent can browse GPUs, rent one with JupyterLab or SSH, poll it for the
+// connection, and stop it; register the SSH public keys an SSH rental logs in
+// with;
 // and, for a GPU provider, manage their own nodes: list them with live GPU
 // load and temperature, add one and get its install command, take it off the
 // market and back, set its price, reclaim a spot node, and read earnings.
@@ -87,7 +89,7 @@ function reply(result, note) {
 }
 
 const server = new Server(
-  { name: "paraloncloud", version: "1.3.1" },
+  { name: "paraloncloud", version: "1.4.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -95,7 +97,7 @@ const TOOLS = [
   {
     name: "list_gpus",
     description:
-      "List GPU nodes available to rent right now, with price per hour, GPU model, VRAM, CUDA compute capability, and country. Rent by the returned node_id. reserved_for_you: true marks a node its provider keeps for this key's person or organization: such nodes come first and nobody else sees them. Read-only, no cost. For modern LLM work prefer compute_cap >= 8.9 (FP8). spot: true marks a spot node: cheaper (list_price_per_hour is the on-demand price), but its provider can take it back with two minutes' notice, so avoid it for long unattended jobs. restricted_internet: true means the node's own network cannot reach the services in unreachable_services (e.g. GitHub, Hugging Face, PyPI, Docker Hub), so git clone, pip install and model or image downloads fail there; prefer a node where it is false when the job downloads anything (null means not checked yet).",
+      "List GPU nodes available to rent right now, with price per hour, GPU model, VRAM, CUDA compute capability, and country. Rent by the returned node_id. reserved_for_you: true marks a node its provider keeps for this key's person or organization: such nodes come first and nobody else sees them. Read-only, no cost. For modern LLM work prefer compute_cap >= 8.9 (FP8). spot: true marks a spot node: cheaper (list_price_per_hour is the on-demand price), but its provider can take it back with two minutes' notice, so avoid it for long unattended jobs. restricted_internet: true means the node's own network cannot reach the services in unreachable_services (e.g. GitHub, Hugging Face, PyPI, Docker Hub), so git clone, pip install and model or image downloads fail there; prefer a node where it is false when the job downloads anything (null means not checked yet). ssh: true means create_rental can start it with type 'ssh'.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -114,8 +116,8 @@ const TOOLS = [
         node_id: { type: "string", description: "Node UUID from list_gpus." },
         type: {
           type: "string",
-          enum: ["jupyter"],
-          description: "Environment to start. Only 'jupyter' is supported.",
+          enum: ["jupyter", "ssh"],
+          description: "How to reach the machine. 'jupyter' (default): JupyterLab in the browser, get_rental returns a URL with its token. 'ssh': a root shell over SSH, for running commands, scp/rsync and VS Code Remote-SSH; only on a node where list_gpus says ssh: true, and it needs an SSH public key saved first (list_ssh_keys / add_ssh_key), since every saved key is installed on the machine. Prefer 'ssh' when you will run commands on the machine yourself.",
         },
         hours: {
           type: "integer",
@@ -132,7 +134,7 @@ const TOOLS = [
   {
     name: "get_rental",
     description:
-      "Get one rental's status and connection details (Jupyter URL + token). After create_rental, call this to get the URL. It WAITS internally (up to ~24s) for the rental to finish coming up and returns as soon as it's ready — so you usually only need ONE call, at most two. Do NOT call it repeatedly in a tight loop. Provisioning plus the secure tunnel take ~20-40 seconds total; the URL is ready when connection_pending is false. Read-only.",
+      "Get one rental's status and connection details: for a JupyterLab rental connection.access_url (URL with its token), for an SSH rental connection.ssh_command (run it from the computer holding the private key; it needs cloudflared installed, and -i <private key> when the key is not in ~/.ssh). After create_rental, call this to get the URL. It WAITS internally (up to ~24s) for the rental to finish coming up and returns as soon as it's ready — so you usually only need ONE call, at most two. Do NOT call it repeatedly in a tight loop. Provisioning plus the secure tunnel take ~20-40 seconds total; the URL is ready when connection_pending is false. Read-only.",
     inputSchema: {
       type: "object",
       properties: { rental_id: { type: "string" } },
@@ -160,6 +162,38 @@ const TOOLS = [
       type: "object",
       properties: { rental_id: { type: "string" } },
       required: ["rental_id"],
+      additionalProperties: false,
+    },
+  },
+
+  {
+    name: "list_ssh_keys",
+    description:
+      "List the SSH public keys saved for this API key's person: every one of them is installed on each SSH rental they start. Read-only, no cost.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "add_ssh_key",
+    description:
+      "Save an SSH public key so SSH rentals accept it (the key also shows on the account's SSH keys page). Pass the PUBLIC key line, e.g. the contents of ~/.ssh/id_ed25519.pub; never a private key. To make one: ssh-keygen -t ed25519 -N '' -f ~/.ssh/paralon_ed25519, then add the .pub file's line and connect with -i ~/.ssh/paralon_ed25519. A key added after a rental started is not on that rental. No cost.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        public_key: { type: "string", description: "One OpenSSH public key line: 'ssh-ed25519 AAAA… comment' (ed25519, ecdsa or rsa ≥2048)." },
+        name: { type: "string", description: "Optional label, e.g. 'laptop' or 'claude-agent'. Defaults to the key's comment." },
+      },
+      required: ["public_key"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "delete_ssh_key",
+    description:
+      "Delete a saved SSH public key by its id (from list_ssh_keys). New SSH rentals no longer accept it; a rental already running keeps it until it stops. Confirm with the user unless they asked for it.",
+    inputSchema: {
+      type: "object",
+      properties: { key_id: { type: "string" } },
+      required: ["key_id"],
       additionalProperties: false,
     },
   },
@@ -340,7 +374,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return reply(
         result,
         result.ok
-          ? "Rental is provisioning. Call get_rental with this rental_id until status is 'running' to get the connection URL."
+          ? (body.type === "ssh"
+              ? "Rental is provisioning. Call get_rental with this rental_id until status is 'running' to get the SSH command."
+              : "Rental is provisioning. Call get_rental with this rental_id until status is 'running' to get the connection URL.")
           : undefined
       );
     }
@@ -374,6 +410,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return reply({ ok: false, data: { error: "invalid_request", message: "rental_id is required." } });
       }
       return reply(await api("DELETE", `/rentals/${encodeURIComponent(args.rental_id)}`));
+    }
+
+    case "list_ssh_keys":
+      return reply(await api("GET", "/ssh-keys"));
+
+    case "add_ssh_key": {
+      if (!args.public_key) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "public_key is required: the line of a .pub file." } });
+      }
+      if (/PRIVATE KEY/.test(args.public_key)) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "That is a private key. Never send it; pass the public key (the .pub file)." } });
+      }
+      const body = { public_key: args.public_key };
+      if (args.name) body.name = args.name;
+      return reply(await api("POST", "/ssh-keys", { body }));
+    }
+
+    case "delete_ssh_key": {
+      if (!args.key_id) {
+        return reply({ ok: false, data: { error: "invalid_request", message: "key_id is required (see list_ssh_keys)." } });
+      }
+      return reply(await api("DELETE", `/ssh-keys/${encodeURIComponent(args.key_id)}`));
     }
 
     // ---- Provider tools
