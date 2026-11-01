@@ -27,8 +27,8 @@ using natural language.
 | --- | --- | --- |
 | `list_gpus` | List rentable GPUs with price, VRAM, compute capability, country | free |
 | `get_balance` | Your credit balance | free |
-| `list_templates` | Apps a rental can start with (ComfyUI, Open WebUI with Ollama), their version and minimums | free |
-| `create_rental` | Start a rental with JupyterLab or SSH (`type: "ssh"`), optionally with an app installed (`template: "comfyui"` or `"openwebui"`) (async → poll) | **spends credits** |
+| `list_templates` | Apps a rental can start with (ComfyUI, Open WebUI with Ollama, Unsloth Studio), their version and minimums | free |
+| `create_rental` | Start a rental with JupyterLab or SSH (`type: "ssh"`), optionally with an app installed (`template: "comfyui"`, `"openwebui"` or `"unsloth"`; an app with its own sign-in returns it in `app.login`) (async → poll) | **spends credits** |
 | `get_rental` | Status + the JupyterLab URL or the SSH command once running, and an app's link (`connection.app_url`) | free |
 | `list_rentals` | Your active rentals (`status: "all"` for history) | free |
 | `destroy_rental` | Stop a rental and stop billing | — |
