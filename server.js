@@ -89,7 +89,7 @@ function reply(result, note) {
 }
 
 const server = new Server(
-  { name: "paraloncloud", version: "1.6.0" },
+  { name: "paraloncloud", version: "1.6.1" },
   { capabilities: { tools: {} } }
 );
 

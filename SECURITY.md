@@ -13,5 +13,5 @@ it a key with only the scopes you need, and keep your MCP client's confirmation 
 
 ## Where it comes from
 
-Every release since 1.6.0 is published from this repository's `publish` workflow with npm
+Every release since 1.6.1 is published from this repository's `publish` workflow with npm
 provenance: the npm page links the commit and the workflow run that built it.
