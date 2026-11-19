@@ -159,8 +159,8 @@ changes nothing. Without a key it only starts the server and checks the tool lis
 
 Releases are published from GitHub Actions with npm provenance, never from a laptop: bump the
 version in `package.json`, `server.json` and `server.js`, commit, then push an annotated tag
-`vX.Y.Z`. The `publish` workflow runs the check and publishes. The npm page shows the commit it
-was built from.
+`vX.Y.Z`. The `publish` workflow runs the check, publishes to npm, then to the official MCP
+registry. The npm page shows the commit it was built from.
 
 ## Run locally (dev)
 

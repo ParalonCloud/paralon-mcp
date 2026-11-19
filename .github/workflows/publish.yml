@@ -39,3 +39,27 @@ jobs:
       - run: node --check server.js
       - run: node smoke-test.mjs
       - run: npm publish --provenance --access public
+      # The official MCP registry (registry.modelcontextprotocol.io), by the
+      # same OIDC token: the io.github.ParalonCloud namespace is granted to a
+      # workflow of the ParalonCloud org, so no personal access token. The
+      # registry checks the npm package (its mcpName), so wait until npm
+      # serves the new version first (it takes a few minutes).
+      - name: Wait until npm serves this version
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          for i in $(seq 40); do
+            npm view "@paraloncloud/mcp@$v" version 2>/dev/null | grep -qx "$v" && exit 0
+            sleep 15
+          done
+          echo "npm does not serve $v after 10 minutes"; exit 1
+      - name: Publish to the official MCP registry
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.7
+          # sha256 of mcp-publisher_linux_amd64.tar.gz of that release
+          MCP_PUBLISHER_SHA256: 00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/mcp-publisher.tgz" "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  $RUNNER_TEMP/mcp-publisher.tgz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/mcp-publisher.tgz" -C "$RUNNER_TEMP" mcp-publisher
+          "$RUNNER_TEMP/mcp-publisher" login github-oidc
+          "$RUNNER_TEMP/mcp-publisher" publish
