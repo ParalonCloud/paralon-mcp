@@ -7,11 +7,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-const key = process.env.PARALON_API_KEY;
-if (!key) {
-  console.error("Set PARALON_API_KEY (a prlc_ key with the rental and/or nodes scope) to run this test.");
-  process.exit(1);
-}
+const key = process.env.PARALON_API_KEY || "";
 
 const transport = new StdioClientTransport({
   command: "node",
@@ -29,6 +25,21 @@ const call = async (name, args = {}) => {
 
 const { tools } = await client.listTools();
 console.log("TOOLS:", tools.map((t) => t.name).join(", "));
+
+// Without a key (CI): the server starts and lists its tools, and the tools a
+// release must carry are there. Nothing reaches the API.
+if (!key) {
+  const want = ["list_gpus", "create_rental", "get_rental", "destroy_rental", "list_my_nodes", "get_earnings"];
+  const missing = want.filter((n) => !tools.some((t) => t.name === n));
+  const rent = tools.find((t) => t.name === "create_rental");
+  if (missing.length || !rent?.inputSchema?.properties?.max_price_per_hour) {
+    console.error("FAIL: missing tools", missing, "or create_rental without max_price_per_hour");
+    process.exit(1);
+  }
+  console.log("No PARALON_API_KEY: tool list checked, API calls skipped.");
+  await client.close();
+  process.exit(0);
+}
 
 const gpus = await call("list_gpus");
 console.log("list_gpus:", gpus.data.total, "GPUs, isError:", gpus.isError);

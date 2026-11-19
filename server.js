@@ -89,7 +89,7 @@ function reply(result, note) {
 }
 
 const server = new Server(
-  { name: "paraloncloud", version: "1.5.0" },
+  { name: "paraloncloud", version: "1.6.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -115,7 +115,7 @@ const TOOLS = [
   {
     name: "create_rental",
     description:
-      "Start renting a GPU. SPENDS CREDITS (per-minute billing) — confirm with the user before calling. Asynchronous: returns a rental_id with status 'pending'. Provisioning + the secure tunnel take ~20-40 seconds. After creating, call get_rental ONCE to fetch the connection URL — it waits internally for startup and returns when ready, so do NOT poll it in a tight loop. DURATION: the rental is open-ended by default (runs until the user stops it with destroy_rental) — use open-ended as the default. When starting one, briefly tell the user it's open-ended and bills per minute until stopped, and that they can set an 'hours' auto-stop cap instead if they prefer; only pass 'hours' when the user asks for a time limit. An idempotency key is generated automatically so accidental repeats don't start a second GPU.",
+      "Start renting a GPU. SPENDS CREDITS (per-minute billing) — confirm with the user before calling. Asynchronous: returns a rental_id with status 'pending'. Provisioning + the secure tunnel take ~20-40 seconds. After creating, call get_rental ONCE to fetch the connection URL — it waits internally for startup and returns when ready, so do NOT poll it in a tight loop. DURATION: the rental is open-ended by default (runs until the user stops it with destroy_rental) — use open-ended as the default. When starting one, briefly tell the user it's open-ended and bills per minute until stopped, and that they can set an 'hours' auto-stop cap instead if they prefer; only pass 'hours' when the user asks for a time limit. An idempotency key is generated automatically so accidental repeats don't start a second GPU. PRICE: always pass max_price_per_hour = the price_per_hour you read for this node in list_gpus (the price you told the user). If the node now costs more, nothing is started or charged and the error is price_changed with the new price_per_hour: tell the user the new price and only retry with it as the new max_price_per_hour if they agree.",
     inputSchema: {
       type: "object",
       properties: {
@@ -136,6 +136,11 @@ const TOOLS = [
           description: "Optional app to install and start on the machine, by slug from list_templates (e.g. 'comfyui'). Only on a node whose templates in list_gpus contains it. The rental is still JupyterLab or SSH as type says, at the same price; the app comes up a minute or two after the machine answers, and get_rental then returns connection.app_url (its own link with a token). It starts empty: the user downloads models from inside the app.",
         },
         name: { type: "string", description: "Optional label for the rental." },
+        max_price_per_hour: {
+          type: "number",
+          exclusiveMinimum: 0,
+          description: "The highest price per hour (USD) to rent at: the price_per_hour list_gpus gave for this node. If the node costs more when the rental starts, it is refused with price_changed and nothing is started or charged.",
+        },
       },
       required: ["node_id"],
       additionalProperties: false,
@@ -381,6 +386,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (args.hours != null) body.hours = args.hours;
       if (args.name) body.name = args.name;
       if (args.template) body.template = args.template;
+      if (args.max_price_per_hour != null) body.max_price_per_hour = args.max_price_per_hour;
       const result = await api("POST", "/rentals", {
         body,
         headers: { "Idempotency-Key": randomUUID() },
@@ -393,6 +399,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               : body.type === "ssh"
               ? "Rental is provisioning. Call get_rental with this rental_id until status is 'running' to get the SSH command."
               : "Rental is provisioning. Call get_rental with this rental_id until status is 'running' to get the connection URL.")
+          : result.data && result.data.error === "price_changed"
+          ? `Not rented: the price changed to $${result.data.price_per_hour}/h (the ceiling was $${body.max_price_per_hour}/h). Nothing was started or charged. Tell the user the new price; retry with max_price_per_hour ${result.data.price_per_hour} only if they agree.`
           : undefined
       );
     }

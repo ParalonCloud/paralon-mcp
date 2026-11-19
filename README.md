@@ -133,6 +133,9 @@ As a provider:
 - `create_rental` and `destroy_rental` change what you're billed — your MCP client will ask you
   to approve them (Claude Code/Desktop confirm tool calls by default). Keep that on.
 - `create_rental` auto-generates an idempotency key, so a retried call never starts a second GPU.
+- `create_rental` takes `max_price_per_hour`, the price the agent read in `list_gpus`. If the
+  node costs more when the rental starts, nothing is started or charged (`price_changed`), and the
+  agent is told to ask you before renting at the new price.
 - Pass `hours` so a rental auto-stops even if the agent forgets to.
 - The key's `max_active_rentals` limit (set in the Console) caps concurrency regardless.
 - The node tools that change something (`add_node`, `set_node_available`, `set_node_price`,
@@ -145,12 +148,19 @@ As a provider:
 ## Test
 
 ```bash
-npm install
+npm ci
 PARALON_API_KEY=prlc_your_key_here node smoke-test.mjs
 ```
 
 It calls the read-only tools, and the node tools only on a node that does not exist, so it
-changes nothing.
+changes nothing. Without a key it only starts the server and checks the tool list (what CI runs).
+
+## Releases
+
+Releases are published from GitHub Actions with npm provenance, never from a laptop: bump the
+version in `package.json`, `server.json` and `server.js`, commit, then push an annotated tag
+`vX.Y.Z`. The `publish` workflow runs the check and publishes. The npm page shows the commit it
+was built from.
 
 ## Run locally (dev)
 
