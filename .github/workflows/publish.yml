@@ -21,9 +21,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Node 24 ships npm 11: Trusted Publishing (the OIDC exchange) needs
+      # npm 11.5.1 or later. Node 22's npm 10.9 got a 404 on the first
+      # release (2026-11-19).
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
       - name: The tag matches package.json, server.json and server.js
         run: |
@@ -31,6 +34,7 @@ jobs:
           test "$(node -p "require('./package.json').version")" = "$v"
           test "$(node -p "require('./server.json').version")" = "$v"
           grep -q "version: \"$v\"" server.js
+      - run: npm --version
       - run: npm ci
       - run: node --check server.js
       - run: node smoke-test.mjs
